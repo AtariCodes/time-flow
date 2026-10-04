@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="cs">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>TimeFlow – denní plánovač</title>
+    <meta name="description" content="Plánovač dne na 24hodinové časové ose. Data zůstávají ve vašem prohlížeči." />
+    <meta name="theme-color" content="#4f46e5" />
+    <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+    <link rel="manifest" href="./manifest.webmanifest" />
+    <script>
+      // Motiv nastavíme ještě před vykreslením, aby stránka neproblikla.
+      (function () {
+        var t = null;
+        try { t = localStorage.getItem('timeflow3_theme'); } catch (e) {}
+        var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+        if (dark) document.documentElement.classList.add('dark');
+        document.documentElement.style.colorScheme = dark ? 'dark' : 'light';
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="app"></div>
+    <noscript>TimeFlow potřebuje zapnutý JavaScript.</noscript>
+    <script type="module" src="./src/main.tsx"></script>
+  </body>
+</html>
