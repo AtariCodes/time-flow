@@ -35,6 +35,36 @@ describe('parseImport', () => {
     expect(state.templates[0].blocks[0].categoryId).toBe('c_sleep');
   });
 
+  it('imports a legacy export with broken blocks instead of rejecting the whole file', () => {
+    const longName = 'x'.repeat(300);
+    const messy = {
+      version: '2.0',
+      days: {
+        '2026-09-01': [
+          { id: 'ok', name: 'Práce', startTime: 540, duration: 60, color: '#4f46e5' },
+          { id: 'nan', name: 'Rozbitý', startTime: 600, duration: null, color: '#4f46e5' },
+          { id: 'str', name: longName, startTime: '720', duration: '30', color: 'blue' },
+          null,
+        ],
+        '2026-09-02': 'nonsense',
+      },
+      notes: { '2026-09-01': 'ok', '2026-09-03': null },
+      templates: [{ name: 'Práce', duration: null, color: '#4f46e5' }, { foo: 1 }],
+      dayTemplates: [{ name: 'Den', blocks: [{ name: 'Práce', startTime: 0, duration: 60, color: '#4f46e5' }] }],
+    };
+    const { kind, state, skipped } = parseImport('\uFEFF' + JSON.stringify(messy), []);
+    expect(kind).toBe('v2');
+    expect(skipped).toBe(4); // blok s null, null blok, den jako text, šablona bez názvu
+    const blocks = state.days['2026-09-01'].blocks;
+    expect(blocks).toHaveLength(2);
+    expect(blocks[1]).toMatchObject({ start: 720, duration: 30 });
+    const cat = state.categories.find((c) => c.id === blocks[1].categoryId)!;
+    expect(cat.name).toHaveLength(120);
+    expect(cat.color).toBe('#64748b');
+    expect(state.days['2026-09-03']).toBeUndefined();
+    expect(state.templates[0].blocks).toHaveLength(1);
+  });
+
   it('converts the legacy single-day format', () => {
     const { kind, state } = parseImport(
       JSON.stringify({ date: '2026-09-01', scheduledBlocks: [{ name: 'A', startTime: 60, duration: 30, color: '#000000' }] }),

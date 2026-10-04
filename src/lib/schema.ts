@@ -68,41 +68,139 @@ export const stateSchema = z.object({
 });
 
 // ---- Formáty původní aplikace (TimeFlow v2) ----
+//
+// Původní aplikace data nijak nekontrolovala, takže zálohy mohou obsahovat i neplatné
+// hodnoty (např. prázdnou délku bloku). Starý formát proto čteme benevolentně:
+// co jde opravit, opravíme; neplatné bloky přeskočíme a jejich počet ohlásíme.
 
-const legacyBlockSchema = z.object({
-  name: z.string().max(MAX_NAME),
-  startTime: z.number(),
-  duration: z.number(),
-  color: z.string(),
-});
+export interface LegacyBlock {
+  name: string;
+  startTime: number;
+  duration: number;
+  color: string;
+}
 
-const legacyTemplateSchema = z.object({
-  name: z.string().max(MAX_NAME),
-  duration: z.number(),
-  color: z.string(),
-});
+export interface LegacyTemplate {
+  name: string;
+  duration: number;
+  color: string;
+}
 
-const legacyDayTemplateSchema = z.object({
-  name: z.string().max(MAX_NAME),
-  blocks: z.array(legacyBlockSchema),
-});
+export interface LegacyExport {
+  days: Record<string, LegacyBlock[]>;
+  notes?: Record<string, string>;
+  templates?: LegacyTemplate[];
+  dayTemplates?: { name: string; blocks: LegacyBlock[] }[];
+  /** Počet přeskočených (neopravitelných) položek. */
+  skipped?: number;
+}
 
-const legacyExportSchema = z.object({
-  days: z.record(z.string(), z.array(legacyBlockSchema)),
-  notes: z.record(z.string(), z.string()).optional(),
-  templates: z.array(legacyTemplateSchema).optional(),
-  dayTemplates: z.array(legacyDayTemplateSchema).optional(),
-});
+type Obj = Record<string, unknown>;
 
-const legacySingleDaySchema = z.object({
-  date: z.string(),
-  scheduledBlocks: z.array(legacyBlockSchema),
-  note: z.string().optional(),
-  templates: z.array(legacyTemplateSchema).optional(),
-  dayTemplates: z.array(legacyDayTemplateSchema).optional(),
-});
+function isObj(v: unknown): v is Obj {
+  return !!v && typeof v === 'object' && !Array.isArray(v);
+}
 
-export type LegacyExport = z.infer<typeof legacyExportSchema>;
+function toNum(v: unknown): number | null {
+  const n = typeof v === 'number' ? v : typeof v === 'string' && v.trim() !== '' ? Number(v.replace(',', '.')) : NaN;
+  return Number.isFinite(n) ? n : null;
+}
+
+function toStr(v: unknown, fallback = ''): string {
+  if (typeof v === 'string') return v;
+  if (typeof v === 'number' && Number.isFinite(v)) return String(v);
+  return fallback;
+}
+
+class LegacyReader {
+  skipped = 0;
+
+  block(v: unknown): LegacyBlock | null {
+    if (!isObj(v)) return this.skip();
+    const startTime = toNum(v.startTime) ?? 0;
+    const duration = toNum(v.duration);
+    if (duration === null || duration <= 0) return this.skip();
+    return { name: toStr(v.name, 'Bez názvu').slice(0, MAX_NAME), startTime, duration, color: toStr(v.color) };
+  }
+
+  blocks(v: unknown): LegacyBlock[] {
+    if (v === null || v === undefined) return [];
+    if (!Array.isArray(v)) {
+      this.skipped++;
+      return [];
+    }
+    return v.map((b) => this.block(b)).filter((b): b is LegacyBlock => b !== null);
+  }
+
+  templates(v: unknown): LegacyTemplate[] | undefined {
+    if (!Array.isArray(v)) return undefined;
+    const out: LegacyTemplate[] = [];
+    for (const t of v) {
+      if (!isObj(t) || !toStr(t.name).trim()) {
+        this.skipped++;
+        continue;
+      }
+      out.push({ name: toStr(t.name).slice(0, MAX_NAME), duration: toNum(t.duration) ?? 60, color: toStr(t.color) });
+    }
+    return out;
+  }
+
+  dayTemplates(v: unknown): LegacyExport['dayTemplates'] {
+    if (!Array.isArray(v)) return undefined;
+    const out: NonNullable<LegacyExport['dayTemplates']> = [];
+    for (const t of v) {
+      if (!isObj(t)) {
+        this.skipped++;
+        continue;
+      }
+      out.push({ name: toStr(t.name, 'Šablona').slice(0, MAX_NAME), blocks: this.blocks(t.blocks) });
+    }
+    return out;
+  }
+
+  notes(v: unknown): Record<string, string> {
+    const out: Record<string, string> = {};
+    if (!isObj(v)) return out;
+    for (const [date, note] of Object.entries(v)) {
+      const text = toStr(note);
+      if (text) out[date] = text.slice(0, MAX_NOTE);
+    }
+    return out;
+  }
+
+  private skip(): null {
+    this.skipped++;
+    return null;
+  }
+}
+
+/** Rozpozná export původní aplikace (formát 2.0 i starší zálohu jednoho dne). */
+export function readLegacyExport(raw: unknown): { kind: 'v2' | 'v1'; data: LegacyExport } | null {
+  if (!isObj(raw)) return null;
+  const r = new LegacyReader();
+  if (isObj(raw.days)) {
+    const days: Record<string, LegacyBlock[]> = {};
+    for (const [date, blocks] of Object.entries(raw.days)) days[date] = r.blocks(blocks);
+    const data: LegacyExport = {
+      days,
+      notes: r.notes(raw.notes),
+      templates: r.templates(raw.templates),
+      dayTemplates: r.dayTemplates(raw.dayTemplates),
+    };
+    return { kind: 'v2', data: { ...data, skipped: r.skipped } };
+  }
+  if (typeof raw.date === 'string' && Array.isArray(raw.scheduledBlocks)) {
+    const note = toStr(raw.note);
+    const data: LegacyExport = {
+      days: { [raw.date]: r.blocks(raw.scheduledBlocks) },
+      notes: note ? { [raw.date]: note.slice(0, MAX_NOTE) } : {},
+      templates: r.templates(raw.templates),
+      dayTemplates: r.dayTemplates(raw.dayTemplates),
+    };
+    return { kind: 'v1', data: { ...data, skipped: r.skipped } };
+  }
+  return null;
+}
 
 /** Doplní chybějící kategorie a odstraní prázdné dny — stav je pak vždy konzistentní. */
 export function normalizeState(input: z.infer<typeof stateSchema>): AppState {
@@ -173,7 +271,7 @@ export function convertLegacy(data: LegacyExport, existing: Category[] = []): Ap
 
   for (const t of data.templates ?? []) categoryFor(t.name, t.color, t.duration);
 
-  const convertBlock = (b: z.infer<typeof legacyBlockSchema>): Omit<Block, 'id'> => {
+  const convertBlock = (b: LegacyBlock): Omit<Block, 'id'> => {
     const cat = categoryFor(b.name, b.color);
     return { categoryId: cat.id, start: toMinuteOfDay(b.startTime), duration: toDuration(b.duration) };
   };
@@ -202,6 +300,8 @@ export type ImportKind = 'v3' | 'v2' | 'v1';
 export interface ParsedImport {
   kind: ImportKind;
   state: AppState;
+  /** Kolik poškozených položek se při převodu přeskočilo (jen u starého formátu). */
+  skipped: number;
 }
 
 export class ImportError extends Error {}
@@ -210,7 +310,8 @@ export class ImportError extends Error {}
 export function parseImport(text: string, existing: Category[]): ParsedImport {
   let raw: unknown;
   try {
-    raw = JSON.parse(text);
+    // Některé editory na začátek souboru přidávají neviditelný znak BOM.
+    raw = JSON.parse(text.replace(/^\uFEFF/, ''));
   } catch {
     throw new ImportError('Soubor není platný JSON.');
   }
@@ -219,24 +320,15 @@ export function parseImport(text: string, existing: Category[]): ParsedImport {
   // poškozená záloha nesmí „projít“ jako prázdná záloha staršího formátu.
   if (raw && typeof raw === 'object' && (raw as { version?: unknown }).version === SCHEMA_VERSION) {
     const v3 = stateSchema.safeParse(raw);
-    if (v3.success) return { kind: 'v3', state: normalizeState(v3.data) };
+    if (v3.success) return { kind: 'v3', state: normalizeState(v3.data), skipped: 0 };
     const issue = v3.error.issues[0];
     throw new ImportError(`Záloha obsahuje neplatná data (${issue.path.join('.')}: ${issue.message}).`);
   }
 
-  const v2 = legacyExportSchema.safeParse(raw);
-  if (v2.success) return { kind: 'v2', state: convertLegacy(v2.data, existing) };
-
-  const v1 = legacySingleDaySchema.safeParse(raw);
-  if (v1.success) {
-    const { date, scheduledBlocks, note, templates, dayTemplates } = v1.data;
-    return {
-      kind: 'v1',
-      state: convertLegacy(
-        { days: { [date]: scheduledBlocks }, notes: note ? { [date]: note } : {}, templates, dayTemplates },
-        existing,
-      ),
-    };
+  const legacy = readLegacyExport(raw);
+  if (legacy) {
+    const state = convertLegacy(legacy.data, existing);
+    return { kind: legacy.kind, state, skipped: legacy.data.skipped ?? 0 };
   }
 
   throw new ImportError('Neznámý formát zálohy.');
@@ -284,7 +376,7 @@ export function parseStoredState(raw: unknown): AppState | null {
 /** Načte data původní aplikace z localStorage (klíče timeflow_*), pokud tam nějaká jsou. */
 export function readLegacyLocalStorage(storage: Storage): LegacyExport | null {
   const days: Record<string, unknown> = {};
-  const notes: Record<string, string> = {};
+  const notes: Record<string, unknown> = {};
   let found = false;
   for (let i = 0; i < storage.length; i++) {
     const key = storage.key(i);
@@ -313,18 +405,6 @@ export function readLegacyLocalStorage(storage: Storage): LegacyExport | null {
   const dayTemplates = readJson('timeflow_day_templates');
   if (!found && !templates && !dayTemplates) return null;
 
-  // Jednotlivé dny validujeme zvlášť, aby jeden poškozený den nezahodil všechno.
-  const validDays: Record<string, z.infer<typeof legacyBlockSchema>[]> = {};
-  for (const [date, blocks] of Object.entries(days)) {
-    const parsed = z.array(legacyBlockSchema).safeParse(blocks);
-    if (parsed.success) validDays[date] = parsed.data;
-  }
-  const parsedTemplates = z.array(legacyTemplateSchema).safeParse(templates);
-  const parsedDayTemplates = z.array(legacyDayTemplateSchema).safeParse(dayTemplates);
-  return {
-    days: validDays,
-    notes,
-    templates: parsedTemplates.success ? parsedTemplates.data : undefined,
-    dayTemplates: parsedDayTemplates.success ? parsedDayTemplates.data : undefined,
-  };
+  // Bloky čteme benevolentně, aby jeden poškozený den nezahodil všechno.
+  return readLegacyExport({ days, notes, templates, dayTemplates })?.data ?? null;
 }
