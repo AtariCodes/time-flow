@@ -88,6 +88,11 @@ function ImportDialog() {
               </li>
               <li>Nových kategorií: {summary.newCategories}</li>
               <li>Šablon dnů: {summary.templates}</li>
+              {parsed.skipped > 0 && (
+                <li class="text-amber-700 dark:text-amber-400">
+                  Přeskočeno poškozených položek: {parsed.skipped} (např. blok bez délky) — ostatní data se naimportují.
+                </li>
+              )}
             </ul>
             <div class="flex flex-wrap justify-end gap-2 pt-1">
               <button type="button" class="btn" onClick={() => apply('replace')}>
