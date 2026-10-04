@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="cs" class="h-full">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TimeFlow – 24h Časová Osa & Plánovač</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        ::-webkit-scrollbar { height: 6px; width: 6px; }
+        ::-webkit-scrollbar-track { background: #f1f5f9; }
+        .dark ::-webkit-scrollbar-track { background: #1e293b; }
+        ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+        .dark ::-webkit-scrollbar-thumb { background: #475569; }
+        ::-webkit-scrollbar-thumb:hover { background: #94a3b8; }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 text-slate-800 dark:text-slate-100 h-full flex flex-col antialiased selection:bg-indigo-500 selection:text-white transition-colors duration-200">
+
+    <header class="bg-white dark:bg-slate-900 border-b border-slate-200 dark:border-slate-800 sticky top-0 z-40 shadow-xs transition-colors duration-200">
+        <div class="w-full px-4 sm:px-8 h-16 flex items-center justify-between">
+            <div class="flex items-center space-x-3">
+                <div class="w-9 h-9 rounded-xl bg-indigo-600 flex items-center justify-center text-white font-bold shadow-sm shadow-indigo-200 dark:shadow-none">
+                    24
+                </div>
+                <div>
+                    <h1 class="text-base font-bold tracking-tight text-slate-900 dark:text-white">TimeFlow <span class="text-xs font-medium px-2 py-0.5 bg-indigo-50 dark:bg-indigo-950/60 text-indigo-600 dark:text-indigo-400 rounded-full ml-1">Pro</span></h1>
+                    <p class="text-xs text-slate-500 dark:text-slate-400" id="header-date-label">Denní plánovač</p>
+                </div>
+            </div>
+
+            <!-- Summary Stats Pill -->
+            <div class="hidden xl:flex items-center space-x-6 text-xs font-medium bg-slate-100 dark:bg-slate-800/80 px-4 py-2 rounded-xl border border-slate-200/80 dark:border-slate-700/80">
+                <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-indigo-600"></span>
+                    <span class="text-slate-600 dark:text-slate-300">Naplánováno: <strong id="stat-allocated" class="text-slate-900 dark:text-white font-semibold">0 h 0 min</strong></span>
+                </div>
+                <div class="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+                <div class="flex items-center space-x-2">
+                    <span class="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                    <span class="text-slate-600 dark:text-slate-300">Volno: <strong id="stat-free" class="text-slate-900 dark:text-white font-semibold">24 h 0 min</strong></span>
+                </div>
+                <div class="h-4 w-px bg-slate-300 dark:bg-slate-700"></div>
+                <div class="flex items-center space-x-2">
+                    <span class="text-slate-600 dark:text-slate-300">Využití: <strong id="stat-percent" class="text-indigo-600 dark:text-indigo-400 font-semibold">0%</strong></span>
+                </div>
+            </div>
+
+            <div class="flex items-center space-x-2">
+                <!-- Dark Mode Toggle Button -->
+                <button onclick="app.toggleDarkMode()" class="p-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors border border-slate-200 dark:border-slate-700" title="Přepnout tmavý/světlý režim">
+                    <span id="dark-mode-icon">🌙</span>
+                </button>
+                <button onclick="app.clearCurrentDay()" class="px-3 py-1.5 text-xs font-medium bg-rose-50 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 text-rose-600 dark:text-rose-400 rounded-lg transition-colors border border-rose-200 dark:border-rose-900/60 flex items-center space-x-1" title="Vymazat celý den">
+                    <span>🗑️ Vymazat den</span>
+                </button>
+                <button onclick="app.saveDayAsTemplatePrompt()" class="px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 hidden sm:flex items-center space-x-1">
+                    <span>💾 Šablona dne</span>
+                </button>
+                <input type="file" id="import-file-input" accept=".json" onchange="app.importData(event)" class="hidden">
+                <button onclick="document.getElementById('import-file-input').click()" class="px-3 py-1.5 text-xs font-medium bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 rounded-lg transition-colors border border-slate-200 dark:border-slate-700 flex items-center space-x-1" title="Nahrát JSON zálohu">
+                    <span>📁 Import</span>
+                </button>
+                <button onclick="app.exportData()" class="px-3 py-1.5 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg transition-colors shadow-sm" title="Exportovat všechny dny a šablony">
+                    Export (Vše)
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="w-full flex-1 px-4 sm:px-8 py-6 flex flex-col xl:flex-row gap-6 overflow-x-hidden">
+        
+        <!-- Left Sidebar: Mini Calendar & Day Templates & Block Bank -->
+        <div class="w-full xl:w-96 shrink-0 flex flex-col gap-6">
+            
+            <!-- Mini Calendar Widget -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 transition-colors duration-200">
+                <div class="flex items-center justify-between mb-4">
+                    <h2 id="calendar-month-year" class="text-sm font-bold text-slate-900 dark:text-white">Září 2026</h2>
+                    <div class="flex items-center space-x-1">
+                        <button onclick="app.changeMonth(-1)" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-400 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path></svg>
+                        </button>
+                        <button onclick="app.goToToday()" class="px-2 py-1 text-xs font-medium hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-400 transition-colors">Dnes</button>
+                        <button onclick="app.changeMonth(1)" class="p-1.5 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg text-slate-600 dark:text-slate-400 transition-colors">
+                            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"></path></svg>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Calendar Grid -->
+                <div class="grid grid-cols-7 gap-1 text-center text-xs font-medium text-slate-400 mb-2">
+                    <span>Po</span><span>Út</span><span>St</span><span>Čt</span><span>Pá</span><span>So</span><span>Ne</span>
+                </div>
+                <div id="calendar-days" class="grid grid-cols-7 gap-1 text-xs">
+                    <!-- Dynamic calendar days -->
+                </div>
+                <div class="mt-3 pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-400">
+                    <span class="flex items-center space-x-1"><span class="w-2 h-2 rounded-full bg-indigo-600"></span><span>Aktivní den</span></span>
+                    <span class="flex items-center space-x-1"><span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span><span>Naplánováno</span></span>
+                </div>
+            </div>
+
+            <!-- Day Templates / Saved Days -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 transition-colors duration-200">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Šablony dnů</h2>
+                    <span class="text-xs text-slate-400">Opakované dny</span>
+                </div>
+                <div id="day-templates-list" class="flex flex-col gap-2 max-h-40 overflow-y-auto">
+                    <!-- Dynamic day templates -->
+                </div>
+            </div>
+
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-5 flex flex-col flex-1 transition-colors duration-200">
+                <div class="flex items-center justify-between mb-3">
+                    <h2 class="text-sm font-semibold text-slate-900 dark:text-white">Zásoba bloků <span id="bank-count" class="text-xs text-slate-400 font-normal"></span></h2>
+                    <span class="text-xs text-slate-400">Přetáhněte na osu</span>
+                </div>
+                
+                <form id="block-form" onsubmit="app.createTemplate(event)" class="space-y-3 mb-4 pb-4 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                        <input type="text" id="template-name" required placeholder="Nový blok (např. Práce, Sport)..." 
+                            class="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100 placeholder-slate-400">
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div>
+                            <input type="number" id="template-duration" min="5" max="1440" step="5" value="60" required placeholder="Minuty"
+                                class="w-full text-xs px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                        </div>
+                        <div class="flex items-center space-x-2">
+                            <input type="color" id="template-color" value="#4f46e5" 
+                                class="w-9 h-8 rounded-lg border border-slate-200 dark:border-slate-700 cursor-pointer bg-transparent p-0">
+                            <button type="submit" class="flex-1 py-2 px-3 bg-slate-900 hover:bg-slate-800 dark:bg-slate-800 dark:hover:bg-slate-700 text-white font-medium text-xs rounded-xl transition-all shadow-xs">
+                                Přidat
+                            </button>
+                        </div>
+                    </div>
+                </form>
+
+                <div id="block-bank" class="flex flex-wrap gap-2 items-start content-start overflow-y-auto max-h-48 p-1">
+                    <!-- Dynamic block templates -->
+                </div>
+            </div>
+        </div>
+
+        <div class="flex-1 flex flex-col gap-6 min-w-0">
+            
+            <!-- Full-Width 24h Timeline Section -->
+            <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-6 flex flex-col relative overflow-hidden transition-colors duration-200">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center space-x-2">
+                        <h2 class="text-sm font-semibold text-slate-900 dark:text-white">24hodinová časová osa</h2>
+                        <span class="text-xs text-slate-400" id="timeline-date-subtitle"></span>
+                    </div>
+                    <div class="flex items-center space-x-3 text-xs text-slate-500">
+                        <span id="current-time-label" class="font-medium text-indigo-600 dark:text-indigo-400 bg-indigo-50 dark:bg-indigo-950/60 px-2.5 py-1 rounded-md"></span>
+                    </div>
+                </div>
+
+                <!-- Timeline Scrollable Viewport -->
+                <div id="timeline-scroll-container" class="overflow-x-auto overflow-y-hidden w-full relative rounded-xl border border-slate-100 dark:border-slate-800 bg-slate-50/50 dark:bg-slate-950/50 select-none">
+                    <div id="timeline-track" class="relative h-48 my-4" style="width: 2500px;" 
+                         ondragover="event.preventDefault()" 
+                         ondrop="app.handleDropOnTimeline(event)"
+                         onclick="app.handleTimelineClick(event)">
+                        
+                        <!-- Hour markers & grid lines -->
+                        <div id="timeline-grid" class="absolute inset-0 flex pointer-events-none"></div>
+
+                        <!-- Placed blocks container -->
+                        <div id="timeline-blocks" class="absolute inset-0"></div>
+
+                        <!-- Current Time Indicator -->
+                        <div id="now-indicator" class="absolute top-0 bottom-0 w-0.5 bg-rose-500 z-20 pointer-events-none hidden">
+                            <div class="absolute -top-3 -translate-x-1/2 bg-rose-500 text-white text-[10px] px-1.5 py-0.5 rounded-full font-bold shadow-xs whitespace-nowrap">Nyní</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-4 pt-4 border-t border-slate-100 dark:border-slate-800 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-2">
+                    <span>💡 <strong>Tip:</strong> Kliknutím vyberte blok (Delete pro smazání). Tažením posouvejte, pravým okrajem měňte délku. Kliknutím na ⚙️ nebo dvojklikem upravíte detaily.</span>
+                    <button onclick="app.scrollToNow()" class="hover:text-indigo-600 dark:hover:text-indigo-400 font-medium transition-colors">📍 Přejít na aktuální čas</button>
+                </div>
+            </div>
+
+            <!-- Bottom Grid: Sorted Activity Chart & Daily Notes -->
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                
+                <!-- Minimalist Activity Bar Chart (Sorted Longest to Shortest) -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-6 flex flex-col transition-colors duration-200">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center space-x-2">
+                            <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Přehled činností</h3>
+                            <span id="chart-total-label" class="text-xs text-slate-400">0 h celkem</span>
+                        </div>
+                        <span class="text-xs text-slate-400">Seřazeno podle trvání</span>
+                    </div>
+                    <div id="sorted-activity-chart" class="flex flex-col gap-3 overflow-y-auto max-h-56 pr-2">
+                        <!-- Dynamic sorted bars -->
+                    </div>
+                </div>
+
+                <!-- Daily Note & Quick Info -->
+                <div class="bg-white dark:bg-slate-900 rounded-2xl border border-slate-200/80 dark:border-slate-800 shadow-xs p-6 flex flex-col transition-colors duration-200">
+                    <div class="flex items-center justify-between mb-3">
+                        <h3 class="text-sm font-semibold text-slate-900 dark:text-white">Poznámka k dnešnímu dni</h3>
+                        <span class="text-xs text-slate-400">Ukládá se automaticky</span>
+                    </div>
+                    <textarea id="day-note-input" oninput="app.saveDailyNote()" placeholder="Zapište si hlavní cíle, myšlenky nebo poznámky pro tento den..." 
+                        class="w-full flex-1 text-xs p-3 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:bg-white dark:focus:bg-slate-900 text-slate-800 dark:text-slate-100 placeholder-slate-400 transition-all resize-none min-h-[120px]"></textarea>
+                </div>
+
+            </div>
+        </div>
+
+    </main>
+
+    <div id="edit-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm w-full p-6 mx-4 transform scale-95 transition-transform duration-200 border border-slate-200 dark:border-slate-800" id="edit-modal-content">
+            <h3 class="text-base font-bold text-slate-900 dark:text-white mb-4">Upravit blok na ose</h3>
+            <form id="edit-form" onsubmit="app.saveEditedBlock(event)" class="space-y-4">
+                <input type="hidden" id="edit-instance-id">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Název</label>
+                    <input type="text" id="edit-name" required class="w-full text-sm px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Začátek (HH:MM)</label>
+                        <input type="text" id="edit-start-time" placeholder="08:00" required pattern="([01]?[0-9]|2[0-3]):([0-5][0-9])"
+                            class="w-full text-sm px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Délka (min)</label>
+                        <input type="number" id="edit-duration" min="5" max="1440" step="1" required
+                            class="w-full text-sm px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                    </div>
+                </div>
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Barva</label>
+                    <input type="color" id="edit-color" class="w-full h-9 rounded-xl border border-slate-200 dark:border-slate-700 cursor-pointer bg-transparent p-0">
+                </div>
+                <div class="flex items-center justify-between pt-2">
+                    <button type="button" onclick="app.deleteSelectedInstance()" class="px-3 py-2 text-xs font-medium text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors">
+                        Smazat
+                    </button>
+                    <div class="flex space-x-2">
+                        <button type="button" onclick="app.closeModal()" class="px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">
+                            Zrušit
+                        </button>
+                        <button type="submit" class="px-4 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors shadow-sm">
+                            Uložit
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Day Template Prompt Modal -->
+    <div id="template-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-xs z-50 flex items-center justify-center hidden opacity-0 transition-opacity duration-200">
+        <div class="bg-white dark:bg-slate-900 rounded-2xl shadow-xl max-w-sm w-full p-6 mx-4 transform scale-95 transition-transform duration-200 border border-slate-200 dark:border-slate-800" id="template-modal-content">
+            <h3 class="text-base font-bold text-slate-900 dark:text-white mb-2">Uložit den jako šablonu</h3>
+            <p class="text-xs text-slate-500 dark:text-slate-400 mb-4">Uložte aktuální časovou osu jako znovupoužitelný den (např. "Pracovní sobota", "Odpolední směna").</p>
+            <form onsubmit="app.saveDayTemplateSubmit(event)" class="space-y-4">
+                <div>
+                    <label class="block text-xs font-medium text-slate-600 dark:text-slate-400 mb-1">Název šablony</label>
+                    <input type="text" id="day-template-name" required placeholder="např. Pracovní sobota" class="w-full text-sm px-3 py-2 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-slate-800 dark:text-slate-100">
+                </div>
+                <div class="flex justify-end space-x-2 pt-2">
+                    <button type="button" onclick="app.closeTemplateModal()" class="px-3 py-2 text-xs font-medium text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl transition-colors">Zrušit</button>
+                    <button type="submit" class="px-4 py-2 text-xs font-medium bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors shadow-sm">Uložit šablonu</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Hover Tooltip for Calendar Days -->
+    <div id="calendar-tooltip" class="fixed z-50 bg-slate-900 text-white text-xs rounded-xl shadow-xl p-3 pointer-events-none hidden max-w-xs transition-opacity duration-150">
+        <div class="font-semibold mb-1" id="tooltip-date-title"></div>
+        <div class="text-[11px] text-slate-300" id="tooltip-content"></div>
+    </div>
+
+    <!-- Toast notification -->
+    <div id="toast" class="fixed bottom-6 right-6 z-50 transform translate-y-20 opacity-0 transition-all duration-300 pointer-events-none">
+        <div class="bg-slate-900 text-white text-xs font-medium px-4 py-3 rounded-xl shadow-lg flex items-center space-x-2 border border-slate-700">
+            <span id="toast-icon">✨</span>
+            <span id="toast-msg">Akce byla úspěšná</span>
+        </div>
+    </div>
+
+    <script>
+        const SCALE = 1.73; // Scaled for wider view: 1440 mins * 1.73 = ~2500px width
+        const TOTAL_MINUTES = 1440;
+
+        class TimeFlowPro {
+            constructor() {
+                this.todayDateStr = this.formatDateKey(new Date());
+                this.currentDateStr = this.todayDateStr;
+                this.activeYear = new Date().getFullYear();
+                this.activeMonth = new Date().getMonth(); // 0-11
+
+                this.templates = [];
+                this.dayTemplates = [];
+                this.scheduledBlocks = [];
+                this.currentEditingId = null;
+                this.selectedBlockId = null;
+                this.isDarkMode = false;
+
+                this.loadData();
+                this.init();
+            }
+
+            init() {
+                this.initDarkMode();
+                this.renderCalendar();
+                this.renderTemplates();
+                this.renderDayTemplates();
+                this.loadActiveDay();
+                this.updateCurrentTimeIndicator();
+
+                setInterval(() => this.updateCurrentTimeIndicator(), 30000);
+
+                window.addEventListener('mousemove', (e) => this.handleGlobalMouseMove(e));
+                window.addEventListener('mouseup', () => this.handleGlobalMouseUp());
+                window.addEventListener('touchmove', (e) => {
+                    if (e.touches.length > 0) this.handleGlobalMouseMove(e.touches[0]);
+                }, { passive: false });
+                window.addEventListener('touchend', () => this.handleGlobalMouseUp());
+
+                // Keyboard shortcuts listener
+                window.addEventListener('keydown', (e) => {
+                    if (e.key === 'Escape') {
+                        this.closeModal();
+                        this.closeTemplateModal();
+                        if (this.selectedBlockId) {
+                            this.selectedBlockId = null;
+                            this.renderScheduledBlocks();
+                        }
+                    }
+                    if ((e.key === 'Delete' || e.key === 'Backspace') && this.selectedBlockId) {
+                        const activeTag = document.activeElement ? document.activeElement.tagName : '';
+                        if (activeTag !== 'INPUT' && activeTag !== 'TEXTAREA') {
+                            e.preventDefault();
+                            this.deleteBlockById(this.selectedBlockId);
+                        }
+                    }
+                });
+
+                this.dragState = null;
+                this.resizeState = null;
+            }
+
+            initDarkMode() {
+                const savedDark = localStorage.getItem('timeflow_dark');
+                if (savedDark !== null) {
+                    this.isDarkMode = JSON.parse(savedDark);
+                } else {
+                    this.isDarkMode = window.matchMedia('(prefers-color-scheme: dark)').matches;
+                }
+                this.applyDarkMode();
+            }
+
+            toggleDarkMode() {
+                this.isDarkMode = !this.isDarkMode;
+                localStorage.setItem('timeflow_dark', JSON.stringify(this.isDarkMode));
+                this.applyDarkMode();
+            }
+
+            applyDarkMode() {
+                const root = document.documentElement;
+                const icon = document.getElementById('dark-mode-icon');
+                if (this.isDarkMode) {
+                    root.classList.add('dark');
+                    if (icon) icon.textContent = '☀️';
+                } else {
+                    root.classList.remove('dark');
+                    if (icon) icon.textContent = '🌙';
+                }
+            }
+
+            formatDateKey(date) {
+                const y = date.getFullYear();
+                const m = String(date.getMonth() + 1).padStart(2, '0');
+                const d = String(date.getDate()).padStart(2, '0');
+                return `${y}-${m}-${d}`;
+            }
+
+            loadData() {
+                // Templates (Block bank)
+                const savedTemplates = localStorage.getItem('timeflow_templates');
+                if (savedTemplates) {
+                    try { this.templates = JSON.parse(savedTemplates); } catch(e) { this.templates = []; }
+                } else {
+                    this.templates = [
+                        { id: 't1', name: 'Hluboká práce', duration: 120, color: '#4f46e5' },
+                        { id: 't2', name: 'E-maily & Admin', duration: 45, color: '#0ea5e9' },
+                        { id: 't3', name: 'Oběd & Odpočinek', duration: 60, color: '#10b981' },
+                        { id: 't4', name: 'Schůzka / Porada', duration: 60, color: '#f59e0b' },
+                        { id: 't5', name: 'Sport / Pohyb', duration: 60, color: '#f43f5e' },
+                        { id: 't6', name: 'Spánek', duration: 480, color: '#6366f1' }
+                    ];
+                    this.saveTemplates();
+                }
+
+                // Day Templates
+                const savedDayTemplates = localStorage.getItem('timeflow_day_templates');
+                if (savedDayTemplates) {
+                    try { this.dayTemplates = JSON.parse(savedDayTemplates); } catch(e) { this.dayTemplates = []; }
+                } else {
+                    this.dayTemplates = [
+                        {
+                            id: 'dt1',
+                            name: 'Standardní pracovní den',
+                            blocks: [
+                                { id: 'b_1', name: 'Spánek', startTime: 0, duration: 480, color: '#6366f1' },
+                                { id: 'b_2', name: 'Hluboká práce', startTime: 540, duration: 180, color: '#4f46e5' },
+                                { id: 'b_3', name: 'Oběd & Odpočinek', startTime: 720, duration: 60, color: '#10b981' },
+                                { id: 'b_4', name: 'E-maily & Admin', startTime: 780, duration: 120, color: '#0ea5e9' }
+                            ]
+                        }
+                    ];
+                    this.saveDayTemplates();
+                }
+            }
+
+            loadActiveDay() {
+                const dayKey = `timeflow_day_${this.currentDateStr}`;
+                const saved = localStorage.getItem(dayKey);
+                if (saved) {
+                    try { this.scheduledBlocks = JSON.parse(saved); } catch(e) { this.scheduledBlocks = []; }
+                } else {
+                    if (this.currentDateStr === this.todayDateStr) {
+                        this.scheduledBlocks = [
+                            { id: 'b1', name: 'Spánek', startTime: 0, duration: 480, color: '#6366f1' },
+                            { id: 'b2', name: 'Hluboká práce', startTime: 540, duration: 120, color: '#4f46e5' },
+                            { id: 'b3', name: 'Oběd & Odpočinek', startTime: 720, duration: 60, color: '#10b981' }
+                        ];
+                    } else {
+                        this.scheduledBlocks = [];
+                    }
+                    this.saveActiveDayBlocks();
+                }
+
+                this.selectedBlockId = null;
+
+                // Load daily note
+                const noteKey = `timeflow_note_${this.currentDateStr}`;
+                document.getElementById('day-note-input').value = localStorage.getItem(noteKey) || '';
+
+                // Update UI headers
+                const [y, m, d] = this.currentDateStr.split('-');
+                const dateObj = new Date(y, m - 1, d);
+                const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                const dateFormatted = dateObj.toLocaleDateString('cs-CZ', options);
+                document.getElementById('header-date-label').textContent = dateFormatted;
+                document.getElementById('timeline-date-subtitle').textContent = `(${dateFormatted})`;
+
+                this.renderGrid();
+                this.renderScheduledBlocks();
+                this.renderSortedChart();
+                this.updateStats();
+                this.renderCalendar();
+            }
+
+            saveActiveDayBlocks() {
+                const dayKey = `timeflow_day_${this.currentDateStr}`;
+                localStorage.setItem(dayKey, JSON.stringify(this.scheduledBlocks));
+                this.updateStats();
+                this.renderSortedChart();
+                this.renderCalendar();
+            }
+
+            clearCurrentDay() {
+                if (this.scheduledBlocks.length === 0) {
+                    this.showToast('Den je již prázdný.', 'ℹ️');
+                    return;
+                }
+                this.scheduledBlocks = [];
+                this.selectedBlockId = null;
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.showToast('Všechny bloky pro tento den byly vymazány.', '🗑️');
+            }
+
+            saveTemplates() {
+                localStorage.setItem('timeflow_templates', JSON.stringify(this.templates));
+            }
+
+            saveDayTemplates() {
+                localStorage.setItem('timeflow_day_templates', JSON.stringify(this.dayTemplates));
+            }
+
+            saveDailyNote() {
+                const noteKey = `timeflow_note_${this.currentDateStr}`;
+                localStorage.setItem(noteKey, document.getElementById('day-note-input').value);
+            }
+
+            showToast(msg, icon = '✨') {
+                const toast = document.getElementById('toast');
+                document.getElementById('toast-msg').textContent = msg;
+                document.getElementById('toast-icon').textContent = icon;
+                toast.classList.remove('translate-y-20', 'opacity-0', 'pointer-events-none');
+                setTimeout(() => {
+                    toast.classList.add('translate-y-20', 'opacity-0', 'pointer-events-none');
+                }, 3000);
+            }
+
+            changeMonth(direction) {
+                this.activeMonth += direction;
+                if (this.activeMonth > 11) {
+                    this.activeMonth = 0;
+                    this.activeYear++;
+                } else if (this.activeMonth < 0) {
+                    this.activeMonth = 11;
+                    this.activeYear--;
+                }
+                this.renderCalendar();
+            }
+
+            goToToday() {
+                const now = new Date();
+                this.activeYear = now.getFullYear();
+                this.activeMonth = now.getMonth();
+                this.selectDate(this.formatDateKey(now));
+            }
+
+            selectDate(dateStr) {
+                this.currentDateStr = dateStr;
+                this.loadActiveDay();
+            }
+
+            renderCalendar() {
+                const monthNames = ['Leden', 'Únor', 'Březen', 'Duben', 'Květen', 'Červen', 'Červenec', 'Srpen', 'Září', 'Říjen', 'Listopad', 'Prosinec'];
+                document.getElementById('calendar-month-year').textContent = `${monthNames[this.activeMonth]} ${this.activeYear}`;
+
+                const firstDayIndex = new Date(this.activeYear, this.activeMonth, 1).getDay();
+                const startingDay = (firstDayIndex === 0) ? 6 : firstDayIndex - 1;
+                const totalDaysInMonth = new Date(this.activeYear, this.activeMonth + 1, 0).getDate();
+                const prevMonthDays = new Date(this.activeYear, this.activeMonth, 0).getDate();
+
+                const container = document.getElementById('calendar-days');
+                let html = '';
+
+                for (let i = startingDay - 1; i >= 0; i--) {
+                    const dayNum = prevMonthDays - i;
+                    html += `<div class="aspect-square flex items-center justify-center text-slate-300 dark:text-slate-700 rounded-xl cursor-default text-xs">${dayNum}</div>`;
+                }
+
+                for (let d = 1; d <= totalDaysInMonth; d++) {
+                    const mStr = String(this.activeMonth + 1).padStart(2, '0');
+                    const dStr = String(d).padStart(2, '0');
+                    const dateStr = `${this.activeYear}-${mStr}-${dStr}`;
+                    
+                    const isSelected = (dateStr === this.currentDateStr);
+                    const isToday = (dateStr === this.todayDateStr);
+                    
+                    const dayData = localStorage.getItem(`timeflow_day_${dateStr}`);
+                    let hasBlocks = false;
+                    if (dayData) {
+                        try {
+                            const parsed = JSON.parse(dayData);
+                            if (parsed.length > 0) hasBlocks = true;
+                        } catch(e) {}
+                    }
+
+                    let btnClasses = "aspect-square flex flex-col items-center justify-center rounded-xl transition-all cursor-pointer relative font-medium ";
+                    if (isSelected) {
+                        btnClasses += "bg-indigo-600 text-white shadow-md shadow-indigo-200 dark:shadow-none font-bold ";
+                    } else if (isToday) {
+                        btnClasses += "bg-indigo-50 dark:bg-indigo-950/60 text-indigo-700 dark:text-indigo-300 border border-indigo-200 dark:border-indigo-800/80 ";
+                    } else {
+                        btnClasses += "hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 ";
+                    }
+
+                    html += `
+                        <div class="${btnClasses}"
+                             onclick="app.selectDate('${dateStr}')"
+                             onmouseenter="app.showCalendarTooltip(event, '${dateStr}')"
+                             onmouseleave="app.hideCalendarTooltip()">
+                            <span>${d}</span>
+                            ${hasBlocks && !isSelected ? '<span class="absolute bottom-1 w-1 h-1 rounded-full bg-emerald-500"></span>' : ''}
+                        </div>
+                    `;
+                }
+
+                container.innerHTML = html;
+            }
+
+            showCalendarTooltip(e, dateStr) {
+                const dayData = localStorage.getItem(`timeflow_day_${dateStr}`);
+                const noteData = localStorage.getItem(`timeflow_note_${dateStr}`);
+                
+                let totalMins = 0;
+                let blocksSummary = [];
+                if (dayData) {
+                    try {
+                        const blocks = JSON.parse(dayData);
+                        blocks.forEach(b => {
+                            totalMins += b.duration;
+                            blocksSummary.push(b.name);
+                        });
+                    } catch(e) {}
+                }
+
+                const hours = Math.floor(totalMins / 60);
+                const mins = totalMins % 60;
+                
+                const tooltip = document.getElementById('calendar-tooltip');
+                document.getElementById('tooltip-date-title').textContent = dateStr;
+                
+                let contentHtml = `Naplánováno: <strong>${hours}h ${mins}m</strong><br>`;
+                if (blocksSummary.length > 0) {
+                    contentHtml += `<span class="text-slate-400">Bloky:</span> ${blocksSummary.slice(0, 4).join(', ')}${blocksSummary.length > 4 ? '...' : ''}<br>`;
+                }
+                if (noteData) {
+                    contentHtml += `<span class="text-slate-400">Poznámka:</span> ${noteData.slice(0, 50)}${noteData.length > 50 ? '...' : ''}`;
+                }
+                document.getElementById('tooltip-content').innerHTML = contentHtml;
+
+                const rect = e.target.getBoundingClientRect();
+                tooltip.style.left = `${rect.left + window.scrollX}px`;
+                tooltip.style.top = `${rect.bottom + window.scrollY + 6}px`;
+                tooltip.classList.remove('hidden');
+            }
+
+            hideCalendarTooltip() {
+                document.getElementById('calendar-tooltip').classList.add('hidden');
+            }
+
+            renderTemplates() {
+                const container = document.getElementById('block-bank');
+                document.getElementById('bank-count').textContent = `(${this.templates.length})`;
+                
+                if (this.templates.length === 0) {
+                    container.innerHTML = `<div class="w-full text-center py-6 text-xs text-slate-400">Zásoba je prázdná.</div>`;
+                    return;
+                }
+
+                container.innerHTML = this.templates.map(t => {
+                    const hours = Math.floor(t.duration / 60);
+                    const mins = t.duration % 60;
+                    const durationStr = hours > 0 ? (mins > 0 ? `${hours}h ${mins}m` : `${hours}h`) : `${mins}m`;
+
+                    return `
+                        <div draggable="true" 
+                             ondragstart="app.handleTemplateDragStart(event, '${t.id}')"
+                             onclick="app.addBlockToStart('${t.id}')"
+                             class="group relative flex items-center space-x-2 px-3 py-1.5 rounded-xl border border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-800/80 hover:border-slate-300 dark:hover:border-slate-700 hover:shadow-xs cursor-grab active:cursor-grabbing transition-all select-none">
+                            <span class="w-2.5 h-2.5 rounded-full shrink-0 shadow-xs" style="background-color: ${t.color}"></span>
+                            <div class="flex flex-col">
+                                <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">${this.escapeHtml(t.name)}</span>
+                                <span class="text-[10px] text-slate-400">${durationStr}</span>
+                            </div>
+                            <button onclick="app.deleteTemplate('${t.id}', event)" class="opacity-0 group-hover:opacity-100 text-slate-400 hover:text-rose-600 p-0.5 ml-1 transition-opacity">×</button>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            createTemplate(e) {
+                e.preventDefault();
+                const name = document.getElementById('template-name').value.trim();
+                const duration = parseInt(document.getElementById('template-duration').value);
+                const color = document.getElementById('template-color').value;
+
+                if (!name || isNaN(duration)) return;
+
+                const newTemplate = { id: 't_' + Date.now(), name, duration, color };
+                this.templates.push(newTemplate);
+                this.saveTemplates();
+                this.renderTemplates();
+                document.getElementById('block-form').reset();
+                document.getElementById('template-color').value = '#4f46e5';
+                this.showToast(`Blok „${name}“ uložen do zásoby.`);
+            }
+
+            deleteTemplate(id, e) {
+                e.stopPropagation();
+                this.templates = this.templates.filter(t => t.id !== id);
+                this.saveTemplates();
+                this.renderTemplates();
+                this.showToast('Blok odstraněn ze zásoby.', '🗑️');
+            }
+
+            renderDayTemplates() {
+                const container = document.getElementById('day-templates-list');
+                if (this.dayTemplates.length === 0) {
+                    container.innerHTML = `<div class="text-xs text-slate-400 py-2">Žádné uložené šablony dnů.</div>`;
+                    return;
+                }
+
+                container.innerHTML = this.dayTemplates.map(dt => `
+                    <div class="flex items-center justify-between p-2.5 bg-slate-50 dark:bg-slate-800/60 border border-slate-200/80 dark:border-slate-800 rounded-xl hover:border-slate-300 dark:hover:border-slate-700 transition-all">
+                        <div class="flex flex-col">
+                            <span class="text-xs font-semibold text-slate-800 dark:text-slate-200">${this.escapeHtml(dt.name)}</span>
+                            <span class="text-[10px] text-slate-400">${dt.blocks.length} bloků v šabloně</span>
+                        </div>
+                        <div class="flex items-center space-x-1">
+                            <button onclick="app.applyDayTemplate('${dt.id}')" title="Vložit do dne" class="px-2.5 py-1 text-[11px] font-medium bg-indigo-50 dark:bg-indigo-950/60 hover:bg-indigo-100 dark:hover:bg-indigo-900/60 text-indigo-600 dark:text-indigo-400 rounded-lg transition-colors">Vložit</button>
+                            <button onclick="app.deleteDayTemplate('${dt.id}')" class="p-1 text-slate-400 hover:text-rose-600 transition-colors">×</button>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            saveDayAsTemplatePrompt() {
+                if (this.scheduledBlocks.length === 0) {
+                    this.showToast('Časová osa je prázdná, není co uložit.', '⚠️');
+                    return;
+                }
+                const modal = document.getElementById('template-modal');
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modal.querySelector('#template-modal-content').classList.remove('scale-95');
+                    modal.querySelector('#template-modal-content').classList.add('scale-100');
+                }, 10);
+            }
+
+            closeTemplateModal() {
+                const modal = document.getElementById('template-modal');
+                modal.classList.add('opacity-0');
+                modal.querySelector('#template-modal-content').classList.remove('scale-100');
+                modal.querySelector('#template-modal-content').classList.add('scale-95');
+                setTimeout(() => modal.classList.add('hidden'), 200);
+            }
+
+            saveDayTemplateSubmit(e) {
+                e.preventDefault();
+                const name = document.getElementById('day-template-name').value.trim();
+                if (!name) return;
+
+                const newDt = {
+                    id: 'dt_' + Date.now(),
+                    name,
+                    blocks: JSON.parse(JSON.stringify(this.scheduledBlocks))
+                };
+
+                this.dayTemplates.push(newDt);
+                this.saveDayTemplates();
+                this.renderDayTemplates();
+                this.closeTemplateModal();
+                document.getElementById('day-template-name').value = '';
+                this.showToast(`Šablona dne „${name}“ byla uložena.`);
+            }
+
+            applyDayTemplate(dtId) {
+                const dt = this.dayTemplates.find(d => d.id === dtId);
+                if (!dt) return;
+
+                this.scheduledBlocks = dt.blocks.map(b => ({
+                    ...b,
+                    id: 'b_' + Math.random().toString(36).substr(2, 9)
+                }));
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.showToast(`Šablona „${dt.name}“ byla načtena.`);
+            }
+
+            deleteDayTemplate(dtId) {
+                this.dayTemplates = this.dayTemplates.filter(d => d.id !== dtId);
+                this.saveDayTemplates();
+                this.renderDayTemplates();
+                this.showToast('Šablona dne byla smazána.', '🗑️');
+            }
+
+            renderGrid() {
+                const gridContainer = document.getElementById('timeline-grid');
+                let html = '';
+                
+                for (let h = 0; h <= 24; h++) {
+                    const leftPos = h * 60 * SCALE;
+                    const timeStr = String(h).padStart(2, '0') + ':00';
+                    
+                    html += `
+                        <div class="absolute top-0 bottom-0 border-l border-slate-200/70 dark:border-slate-800 flex flex-col justify-between" style="left: ${leftPos}px;">
+                            <span class="text-[11px] font-semibold text-slate-400 -translate-x-1/2 pt-2 select-none">${h < 24 ? timeStr : '24:00'}</span>
+                            <div class="h-full border-l border-dashed border-slate-200/40 dark:border-slate-800/40"></div>
+                            <span class="text-[10px] text-slate-300 dark:text-slate-700 -translate-x-1/2 pb-2 select-none">${h < 24 ? timeStr : ''}</span>
+                        </div>
+                    `;
+                }
+                gridContainer.innerHTML = html;
+            }
+
+            handleTimelineClick(e) {
+                if (e.target.id === 'timeline-track' || e.target.id === 'timeline-grid' || e.target.id === 'timeline-blocks') {
+                    if (this.selectedBlockId) {
+                        this.selectedBlockId = null;
+                        this.renderScheduledBlocks();
+                    }
+                }
+            }
+
+            handleTemplateDragStart(e, templateId) {
+                e.dataTransfer.setData('text/plain', templateId);
+            }
+
+            handleDropOnTimeline(e) {
+                e.preventDefault();
+                const templateId = e.dataTransfer.getData('text/plain');
+                if (!templateId) return;
+
+                const template = this.templates.find(t => t.id === templateId);
+                if (!template) return;
+
+                const trackRect = document.getElementById('timeline-track').getBoundingClientRect();
+                const clickX = e.clientX - trackRect.left;
+                let startMinute = Math.round(clickX / SCALE);
+
+                if (startMinute < 0) startMinute = 0;
+                if (startMinute + template.duration > TOTAL_MINUTES) {
+                    startMinute = TOTAL_MINUTES - template.duration;
+                }
+
+                const newBlock = {
+                    id: 'b_' + Date.now(),
+                    name: template.name,
+                    startTime: Math.max(0, startMinute),
+                    duration: template.duration,
+                    color: template.color
+                };
+
+                this.scheduledBlocks.push(newBlock);
+                this.selectedBlockId = newBlock.id;
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.showToast(`Blok „${template.name}“ umístěn na osu.`);
+            }
+
+            addBlockToStart(templateId) {
+                const template = this.templates.find(t => t.id === templateId);
+                if (!template) return;
+
+                let startMinute = 0;
+                if (this.scheduledBlocks.length > 0) {
+                    const sorted = [...this.scheduledBlocks].sort((a,b) => a.startTime - b.startTime);
+                    const last = sorted[sorted.length - 1];
+                    const tentative = last.startTime + last.duration;
+                    if (tentative + template.duration <= TOTAL_MINUTES) {
+                        startMinute = tentative;
+                    }
+                }
+
+                const newBlock = {
+                    id: 'b_' + Date.now(),
+                    name: template.name,
+                    startTime: startMinute,
+                    duration: template.duration,
+                    color: template.color
+                };
+
+                this.scheduledBlocks.push(newBlock);
+                this.selectedBlockId = newBlock.id;
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.showToast(`Blok „${template.name}“ přidán.`);
+            }
+
+            renderScheduledBlocks() {
+                const container = document.getElementById('timeline-blocks');
+                
+                container.innerHTML = this.scheduledBlocks.map(b => {
+                    const left = b.startTime * SCALE;
+                    const width = b.duration * SCALE;
+                    const hours = Math.floor(b.duration / 60);
+                    const mins = b.duration % 60;
+                    const durationLabel = hours > 0 ? (mins > 0 ? `${hours}h ${mins}m` : `${hours}h`) : `${mins}m`;
+                    
+                    const startH = Math.floor(b.startTime / 60);
+                    const startM = b.startTime % 60;
+                    const endMin = b.startTime + b.duration;
+                    const endH = Math.floor(endMin / 60) % 24;
+                    const endM = endMin % 60;
+                    const timeRange = `${String(startH).padStart(2,'0')}:${String(startM).padStart(2,'0')} – ${String(endH).padStart(2,'0')}:${String(endM).padStart(2,'0')}`;
+
+                    const isSelected = (b.id === this.selectedBlockId);
+                    const selectionRing = isSelected ? 'ring-4 ring-indigo-400 ring-offset-2 ring-offset-white dark:ring-offset-slate-900 shadow-lg z-30' : '';
+
+                    return `
+                        <div class="absolute top-12 bottom-12 rounded-xl shadow-xs cursor-pointer flex flex-col justify-between p-3 transition-all hover:shadow-md group border border-white/20 select-none ${selectionRing}"
+                             style="left: ${left}px; width: ${Math.max(width, 45)}px; background-color: ${b.color}; color: #ffffff;"
+                             onmousedown="app.initBlockDown(event, '${b.id}')"
+                             ontouchstart="app.initBlockDown(event, '${b.id}')"
+                             onclick="app.handleBlockClick(event, '${b.id}')"
+                             ondblclick="app.openEditModal('${b.id}', event)">
+                            
+                            <div class="flex items-start justify-between overflow-hidden">
+                                <span class="text-xs font-semibold truncate drop-shadow-xs">${this.escapeHtml(b.name)}</span>
+                                <div class="flex items-center space-x-1 shrink-0">
+                                    <span class="text-[10px] opacity-90 bg-black/20 px-1.5 py-0.5 rounded-md">${durationLabel}</span>
+                                    <button type="button" onclick="app.openEditModal('${b.id}', event)" class="opacity-0 group-hover:opacity-100 hover:bg-black/30 p-1 rounded transition-opacity" title="Upravit detaily">⚙️</button>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center justify-between text-[10px] opacity-90">
+                                <span>${timeRange}</span>
+                                <span class="opacity-0 group-hover:opacity-100 transition-opacity bg-black/30 px-1.5 py-0.5 rounded-md">Dvojklik ⚙️</span>
+                            </div>
+
+                            <div class="absolute top-0 bottom-0 right-0 w-3 cursor-ew-resize hover:bg-black/20 rounded-r-xl flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity"
+                                 onmousedown="app.initResize(event, '${b.id}')"
+                                 ontouchstart="app.initResize(event, '${b.id}')"
+                                 title="Změnit délku">
+                                <div class="w-0.5 h-4 bg-white/70 rounded-full"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            handleBlockClick(e, blockId) {
+                e.stopPropagation();
+                this.selectedBlockId = blockId;
+                this.renderScheduledBlocks();
+            }
+
+            deleteBlockById(blockId) {
+                this.scheduledBlocks = this.scheduledBlocks.filter(b => b.id !== blockId);
+                this.selectedBlockId = null;
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.showToast('Blok smazán.', '🗑️');
+            }
+
+            renderSortedChart() {
+                const container = document.getElementById('sorted-activity-chart');
+                const summaryMap = {};
+                let totalAllocated = 0;
+
+                this.scheduledBlocks.forEach(b => {
+                    totalAllocated += b.duration;
+                    if (!summaryMap[b.name]) {
+                        summaryMap[b.name] = { name: b.name, duration: 0, color: b.color };
+                    }
+                    summaryMap[b.name].duration += b.duration;
+                });
+                document.getElementById('chart-total-label').textContent = `${Math.floor(totalAllocated/60)} h ${totalAllocated%60} min celkem`;
+
+                const sortedActivities = Object.values(summaryMap).sort((a, b) => b.duration - a.duration);
+
+                if (sortedActivities.length === 0) {
+                    container.innerHTML = `<div class="text-xs text-slate-400 py-6 text-center">Žádné aktivity k zobrazení.</div>`;
+                    return;
+                }
+
+                container.innerHTML = sortedActivities.map(act => {
+                    const hours = Math.floor(act.duration / 60);
+                    const mins = act.duration % 60;
+                    const durStr = hours > 0 ? (mins > 0 ? `${hours}h ${mins}m` : `${hours}h`) : `${mins}m`;
+                    const percent = totalAllocated > 0 ? Math.round((act.duration / totalAllocated) * 100) : 0;
+                    const maxDur = sortedActivities[0].duration || 1;
+                    const barWidthPercent = Math.max(8, Math.round((act.duration / maxDur) * 100));
+
+                    return `
+                        <div class="flex flex-col space-y-1">
+                            <div class="flex items-center justify-between text-xs">
+                                <span class="font-semibold text-slate-700 dark:text-slate-300 flex items-center space-x-2">
+                                    <span class="w-2.5 h-2.5 rounded-full inline-block" style="background-color: ${act.color}"></span>
+                                    <span>${this.escapeHtml(act.name)}</span>
+                                </span>
+                                <span class="text-slate-500 dark:text-slate-400 font-medium">${durStr} <span class="text-[10px] text-slate-400">(${percent}%)</span></span>
+                            </div>
+                            <div class="w-full bg-slate-100 dark:bg-slate-800 h-2.5 rounded-full overflow-hidden">
+                                <div class="h-full rounded-full transition-all duration-500" style="width: ${barWidthPercent}%; background-color: ${act.color};"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+            }
+
+            initBlockDown(e, blockId) {
+                if (e.target.closest('[title="Změnit délku"]') || e.target.closest('button')) return;
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                if (!clientX) return;
+
+                const block = this.scheduledBlocks.find(b => b.id === blockId);
+                if (!block) return;
+
+                this.selectedBlockId = blockId;
+                this.renderScheduledBlocks();
+                
+                this.potentialDrag = { blockId, startX: clientX, initialStartTime: block.startTime, moved: false };
+            }
+
+            initResize(e, blockId) {
+                e.stopPropagation();
+                e.preventDefault();
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                if (!clientX) return;
+
+                const block = this.scheduledBlocks.find(b => b.id === blockId);
+                if (!block) return;
+
+                this.selectedBlockId = blockId;
+                this.renderScheduledBlocks();
+                this.resizeState = { blockId, startX: clientX, initialDuration: block.duration };
+            }
+
+            handleGlobalMouseMove(e) {
+                const clientX = e.clientX || (e.touches && e.touches[0].clientX);
+                if (!clientX) return;
+
+                if (this.potentialDrag && !this.dragState) {
+                    if (Math.abs(clientX - this.potentialDrag.startX) > 4) {
+                        this.dragState = {
+                            blockId: this.potentialDrag.blockId,
+                            startX: this.potentialDrag.startX,
+                            initialStartTime: this.potentialDrag.initialStartTime
+                        };
+                        this.potentialDrag = null;
+                    }
+                }
+
+                if (this.dragState) {
+                    const deltaX = clientX - this.dragState.startX;
+                    const deltaMinutes = Math.round(deltaX / SCALE);
+                    const block = this.scheduledBlocks.find(b => b.id === this.dragState.blockId);
+                    
+                    if (block) {
+                        let newStart = this.dragState.initialStartTime + deltaMinutes;
+                        if (newStart < 0) newStart = 0;
+                        if (newStart + block.duration > TOTAL_MINUTES) newStart = TOTAL_MINUTES - block.duration;
+                        block.startTime = newStart;
+                        this.renderScheduledBlocks();
+                        this.updateStats();
+                    }
+                } else if (this.resizeState) {
+                    const deltaX = clientX - this.resizeState.startX;
+                    const deltaMinutes = Math.round(deltaX / SCALE);
+                    const block = this.scheduledBlocks.find(b => b.id === this.resizeState.blockId);
+                    
+                    if (block) {
+                        let newDuration = this.resizeState.initialDuration + deltaMinutes;
+                        if (newDuration < 5) newDuration = 5;
+                        if (block.startTime + newDuration > TOTAL_MINUTES) newDuration = TOTAL_MINUTES - block.startTime;
+                        block.duration = newDuration;
+                        this.renderScheduledBlocks();
+                        this.updateStats();
+                    }
+                }
+            }
+
+            handleGlobalMouseUp() {
+                if (this.dragState || this.resizeState) {
+                    this.saveActiveDayBlocks();
+                    this.dragState = null;
+                    this.resizeState = null;
+                }
+                this.potentialDrag = null;
+            }
+
+            openEditModal(blockId, e) {
+                if (e) {
+                    e.stopPropagation();
+                    e.preventDefault();
+                }
+                const block = this.scheduledBlocks.find(b => b.id === blockId);
+                if (!block) return;
+
+                this.currentEditingId = blockId;
+                this.selectedBlockId = blockId;
+                this.renderScheduledBlocks();
+
+                document.getElementById('edit-instance-id').value = block.id;
+                document.getElementById('edit-name').value = block.name;
+                
+                const startH = String(Math.floor(block.startTime / 60)).padStart(2, '0');
+                const startM = String(block.startTime % 60).padStart(2, '0');
+                document.getElementById('edit-start-time').value = `${startH}:${startM}`;
+                document.getElementById('edit-duration').value = block.duration;
+                document.getElementById('edit-color').value = block.color;
+
+                const modal = document.getElementById('edit-modal');
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.remove('opacity-0');
+                    modal.querySelector('#edit-modal-content').classList.remove('scale-95');
+                    modal.querySelector('#edit-modal-content').classList.add('scale-100');
+                }, 10);
+            }
+
+            closeModal() {
+                const modal = document.getElementById('edit-modal');
+                modal.classList.add('opacity-0');
+                modal.querySelector('#edit-modal-content').classList.remove('scale-100');
+                modal.querySelector('#edit-modal-content').classList.add('scale-95');
+                setTimeout(() => {
+                    modal.classList.add('hidden');
+                    this.currentEditingId = null;
+                }, 200);
+            }
+
+            saveEditedBlock(e) {
+                e.preventDefault();
+                if (!this.currentEditingId) return;
+
+                const block = this.scheduledBlocks.find(b => b.id === this.currentEditingId);
+                if (!block) return;
+
+                block.name = document.getElementById('edit-name').value.trim();
+                block.duration = parseInt(document.getElementById('edit-duration').value);
+                block.color = document.getElementById('edit-color').value;
+
+                const timeStr = document.getElementById('edit-start-time').value;
+                const parts = timeStr.split(':');
+                if (parts.length === 2) {
+                    const h = parseInt(parts[0]);
+                    const m = parseInt(parts[1]);
+                    if (!isNaN(h) && !isNaN(m)) {
+                        let newStart = h * 60 + m;
+                        if (newStart + block.duration > TOTAL_MINUTES) newStart = TOTAL_MINUTES - block.duration;
+                        block.startTime = Math.max(0, newStart);
+                    }
+                }
+
+                this.saveActiveDayBlocks();
+                this.renderScheduledBlocks();
+                this.closeModal();
+                this.showToast('Blok byl aktualizován.');
+            }
+
+            deleteSelectedInstance() {
+                if (!this.currentEditingId) return;
+                this.deleteBlockById(this.currentEditingId);
+                this.closeModal();
+            }
+
+            updateStats() {
+                let totalAllocated = 0;
+                this.scheduledBlocks.forEach(b => totalAllocated += b.duration);
+                const freeMinutes = Math.max(0, TOTAL_MINUTES - totalAllocated);
+                
+                const formatHM = (mins) => `${Math.floor(mins / 60)} h ${mins % 60} min`;
+
+                document.getElementById('stat-allocated').textContent = formatHM(totalAllocated);
+                document.getElementById('stat-free').textContent = formatHM(freeMinutes);
+                document.getElementById('stat-percent').textContent = `${Math.round((totalAllocated / TOTAL_MINUTES) * 100)}%`;
+            }
+
+            updateCurrentTimeIndicator() {
+                const now = new Date();
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                const label = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`;
+                document.getElementById('current-time-label').textContent = `Dnes ${label}`;
+
+                if (this.currentDateStr === this.todayDateStr) {
+                    const indicator = document.getElementById('now-indicator');
+                    indicator.classList.remove('hidden');
+                    indicator.style.left = `${currentMinutes * SCALE}px`;
+                } else {
+                    document.getElementById('now-indicator').classList.add('hidden');
+                }
+            }
+
+            scrollToNow() {
+                const now = new Date();
+                const currentMinutes = now.getHours() * 60 + now.getMinutes();
+                const container = document.getElementById('timeline-scroll-container');
+                const targetX = (currentMinutes * SCALE) - (container.clientWidth / 2);
+                container.scrollTo({ left: Math.max(0, targetX), behavior: 'smooth' });
+            }
+
+            exportData() {
+                const daysData = {};
+                const notesData = {};
+                for (let i = 0; i < localStorage.length; i++) {
+                    const key = localStorage.key(i);
+                    if (key.startsWith('timeflow_day_')) {
+                        const dateStr = key.replace('timeflow_day_', '');
+                        try {
+                            daysData[dateStr] = JSON.parse(localStorage.getItem(key));
+                        } catch(e) {}
+                    }
+                    if (key.startsWith('timeflow_note_')) {
+                        const dateStr = key.replace('timeflow_note_', '');
+                        notesData[dateStr] = localStorage.getItem(key);
+                    }
+                }
+
+                const data = {
+                    version: '2.0',
+                    exportDate: this.formatDateKey(new Date()),
+                    days: daysData,
+                    notes: notesData,
+                    templates: this.templates,
+                    dayTemplates: this.dayTemplates
+                };
+
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `timeflow-kompletni-zaloha-${this.formatDateKey(new Date())}.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+                this.showToast('Všechny naplánované dny a šablony byly úspěšně exportovány.');
+            }
+
+            importData(e) {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.days) {
+                            // New multi-day format
+                            for (const [dateStr, blocks] of Object.entries(data.days)) {
+                                localStorage.setItem(`timeflow_day_${dateStr}`, JSON.stringify(blocks));
+                            }
+                            if (data.notes) {
+                                for (const [dateStr, note] of Object.entries(data.notes)) {
+                                    localStorage.setItem(`timeflow_note_${dateStr}`, note);
+                                }
+                            }
+                            if (data.templates) {
+                                localStorage.setItem('timeflow_templates', JSON.stringify(data.templates));
+                                this.templates = data.templates;
+                            }
+                            if (data.dayTemplates) {
+                                localStorage.setItem('timeflow_day_templates', JSON.stringify(data.dayTemplates));
+                                this.dayTemplates = data.dayTemplates;
+                            }
+                            this.loadActiveDay();
+                            this.renderTemplates();
+                            this.renderDayTemplates();
+                            this.showToast('Kompletní záloha byla úspěšně importována.');
+                        } else if (data.date && data.scheduledBlocks) {
+                            // Legacy single-day format
+                            localStorage.setItem(`timeflow_day_${data.date}`, JSON.stringify(data.scheduledBlocks));
+                            if (data.note !== undefined) {
+                                localStorage.setItem(`timeflow_note_${data.date}`, data.note);
+                            }
+                            if (data.templates) {
+                                localStorage.setItem('timeflow_templates', JSON.stringify(data.templates));
+                                this.templates = data.templates;
+                            }
+                            if (data.dayTemplates) {
+                                localStorage.setItem('timeflow_day_templates', JSON.stringify(data.dayTemplates));
+                                this.dayTemplates = data.dayTemplates;
+                            }
+                            this.currentDateStr = data.date;
+                            const [y, m, d] = data.date.spec || data.date.split('-');
+                            this.activeYear = parseInt(y);
+                            this.activeMonth = parseInt(m) - 1;
+                            
+                            this.loadActiveDay();
+                            this.renderTemplates();
+                            this.renderDayTemplates();
+                            this.showToast('Záloha dne byla úspěšně importována.');
+                        } else {
+                            this.showToast('Neplatný formát zálohy.', '❌');
+                        }
+                    } catch(err) {
+                        this.showToast('Chyba při čtení souboru.', '❌');
+                    }
+                    e.target.value = '';
+                };
+                reader.readAsText(file);
+            }
+
+            escapeHtml(str) {
+                return str.replace(/[&<>'"]/g, 
+                    tag => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' }[tag] || tag)
+                );
+            }
+        }
+
+        const app = new TimeFlowPro();
+    </script>
+</body>
+</html>
